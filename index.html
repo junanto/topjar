@@ -35,7 +35,7 @@ header{background:linear-gradient(115deg,#102b4d,#1d4e89);color:white;padding:9p
 <script>
 (()=>{'use strict';
 // Tempel URL Web App Google Apps Script pada baris berikut setelah deploy.
-const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzhXUvHjIUd5rurKXSs6b2PDqEeclWqidhtwvnidT9kaT7AODEqOcqEo1wSt3rhNTAL/exec';
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzhXUvHjIUd5rurKXSs6b2PDqEeclWqidhtwvnidT9kaT7AODEqOcqEo1wSt3rhNTAL/exec";
 const canvas=document.getElementById('networkCanvas'),ctx=canvas.getContext('2d'),wrap=document.getElementById('canvasWrap');
 const $=id=>document.getElementById(id); const GRID=20;
 let nodes=[],links=[],nextId=1,selected=null,dragging=null,dragOffset={x:0,y:0},moveMode=false,deleteMode=false,hintLevel=1,lastReport='',dataPackets=[],animationActive=false,studentName='',studentClass='',started=false;
