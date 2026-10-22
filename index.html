@@ -35,7 +35,7 @@ header{background:linear-gradient(115deg,#102b4d,#1d4e89);color:white;padding:9p
 <script>
 (()=>{'use strict';
 // Tempel URL Web App Google Apps Script pada baris berikut setelah deploy.
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzhXUvHjIUd5rurKXSs6b2PDqEeclWqidhtwvnidT9kaT7AODEqOcqEo1wSt3rhNTAL/exec";
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzU60z3F3ovqgzSpOM4YzJXb2a1BfVVuFHPQz8JCFqk6VcgzB8DYu8IQKpNKhUG3wc4/exec";
 const canvas=document.getElementById('networkCanvas'),ctx=canvas.getContext('2d'),wrap=document.getElementById('canvasWrap');
 const $=id=>document.getElementById(id); const GRID=20;
 let nodes=[],links=[],nextId=1,selected=null,dragging=null,dragOffset={x:0,y:0},moveMode=false,deleteMode=false,hintLevel=1,lastReport='',dataPackets=[],animationActive=false,studentName='',studentClass='',started=false;
@@ -76,16 +76,41 @@ $('nextHint').addEventListener('click',()=>{hintLevel=Math.min(hintLevel+1,hints
 $('studentForm').addEventListener('submit',e=>{e.preventDefault();studentName=$('studentName').value.trim();studentClass=$('studentClass').value.trim();if(!studentName||!studentClass)return;started=true;$('startGate').classList.add('hidden');resizeCanvas();setStatus('Selamat bekerja, '+studentName+' dari kelas '+studentClass+'.');});
 $('resetBtn').addEventListener('click',()=>{if(confirm('Atur ulang semua perangkat dan koneksi?')){hintLevel=1;$('hintText').textContent=hints[0];$('nextHint').textContent='Tampilkan petunjuk berikutnya';init();setStatus('Rancangan diatur ulang. Mulai hubungkan perangkat.');}});
 function getComponents(){let adj=new Map(nodes.map(n=>[n.id,[]]));links.forEach(l=>{if(adj.has(l.a)&&adj.has(l.b)){adj.get(l.a).push(l.b);adj.get(l.b).push(l.a);}});let comp=new Map(),c=0;for(let n of nodes){if(comp.has(n.id))continue;c++;let q=[n.id];comp.set(n.id,c);while(q.length){let id=q.shift();for(let nb of adj.get(id)||[])if(!comp.has(nb)){comp.set(nb,c);q.push(nb);}}}return{adj,comp,count:c};}
-async function sendScoreToSheet(score){
- const box=$('sheetStatus');
- if(!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL.includes('TEMPEL_URL_')){box.className='sheet-status warn';box.textContent='Belum terhubung: pasang URL Web App Apps Script pada konstanta GOOGLE_SCRIPT_URL di file HTML.';return;}
- box.className='sheet-status';box.textContent='Mengirim nama, kelas, dan skor ke Google Sheets…';
- const payload=new URLSearchParams({nama:studentName,kelas:studentClass,skor:String(score),maksimal:'100',tanggal:new Date().toISOString(),ringkasan:score>=90?'Sangat baik':score>=70?'Baik':score>=40?'Cukup':'Perlu perbaikan'});
- try{
-   // no-cors dipakai agar file HTML lokal dapat mengirim POST lintas-origin; respons tidak dapat dibaca browser.
-   await fetch(GOOGLE_SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:payload.toString()});
-   box.className='sheet-status ok';box.textContent='Permintaan pengiriman sudah dikirim. Periksa Google Sheets untuk memastikan baris data masuk.';
- }catch(err){box.className='sheet-status warn';box.textContent='Pengiriman gagal. Periksa koneksi internet dan URL Web App Apps Script.';}
+async function sendScoreToSheet(score) {
+  const box = $('sheetStatus');
+  if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL.includes('TEMPEL_URL_')) {
+    box.className = 'sheet-status warn';
+    box.textContent = 'Belum terhubung: pasang URL Web App Apps Script pada konstanta GOOGLE_SCRIPT_URL di file HTML.';
+    return;
+  }
+  
+  box.className = 'sheet-status';
+  box.textContent = 'Mengirim nama, kelas, dan skor ke Google Sheets…';
+
+  // Buat FormData untuk dikirim via POST
+  const formData = new FormData();
+  formData.append('nama', studentName);
+  formData.append('kelas', studentClass);
+  formData.append('skor', String(score));
+  formData.append('maksimal', '100');
+  formData.append('tanggal', new Date().toLocaleString('id-ID'));
+  formData.append('ringkasan', score >= 90 ? 'Sangat baik' : score >= 70 ? 'Baik' : score >= 40 ? 'Cukup' : 'Perlu perbaikan');
+
+  try {
+    // Menggunakan fetch dengan method POST
+    await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors', // Penting untuk pengiriman lintas domain/file lokal
+      body: formData
+    });
+    
+    box.className = 'sheet-status ok';
+    box.textContent = 'Permintaan pengiriman sudah dikirim. Periksa Google Sheets untuk memastikan baris data masuk.';
+  } catch (err) {
+    console.error('Error Apps Script:', err);
+    box.className = 'sheet-status warn';
+    box.textContent = 'Pengiriman gagal. Periksa koneksi internet dan URL Web App Apps Script.';
+  }
 }
 function testNetwork(){if(!started){$('startGate').classList.remove('hidden');return;}let pcs=nodes.filter(n=>n.type==='pc'),switches=nodes.filter(n=>n.type==='switch8'||n.type==='switch16'),{adj,comp,count}=getComponents();let connected=pcs.filter(n=>adj.get(n.id)?.length>0).length;let pcComponents=new Set(pcs.filter(n=>adj.get(n.id)?.length>0).map(n=>comp.get(n.id)));let allPcSame=pcs.length>0&&new Set(pcs.map(n=>comp.get(n.id))).size===1&&pcs.every(n=>(adj.get(n.id)||[]).length>0);let switchConnected=switches.filter(n=>(adj.get(n.id)||[]).length>0).length;let score=0;let criteria=[];
  let pcPct=pcs.length?connected/pcs.length:0;score+=Math.round(pcPct*45);criteria.push(`${connected}/${pcs.length} PC memiliki setidaknya satu koneksi (+${Math.round(pcPct*45)}/45)`);
