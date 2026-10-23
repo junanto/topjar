@@ -112,14 +112,48 @@ async function sendScoreToSheet(score) {
     box.textContent = 'Pengiriman gagal. Periksa koneksi internet dan URL Web App Apps Script.';
   }
 }
-function testNetwork(){if(!started){$('startGate').classList.remove('hidden');return;}let pcs=nodes.filter(n=>n.type==='pc'),switches=nodes.filter(n=>n.type==='switch8'||n.type==='switch16'),{adj,comp,count}=getComponents();let connected=pcs.filter(n=>adj.get(n.id)?.length>0).length;let pcComponents=new Set(pcs.filter(n=>adj.get(n.id)?.length>0).map(n=>comp.get(n.id)));let allPcSame=pcs.length>0&&new Set(pcs.map(n=>comp.get(n.id))).size===1&&pcs.every(n=>(adj.get(n.id)||[]).length>0);let switchConnected=switches.filter(n=>(adj.get(n.id)||[]).length>0).length;let score=0;let criteria=[];
- let pcPct=pcs.length?connected/pcs.length:0;score+=Math.round(pcPct*45);criteria.push(`${connected}/${pcs.length} PC memiliki setidaknya satu koneksi (+${Math.round(pcPct*45)}/45)`);
- let shared=pcs.length?allPcSame:false;score+=shared?30:Math.round((pcComponents.size===1&&connected===pcs.length?1:0)*10);criteria.push(shared?'Semua PC berada dalam satu jaringan terhubung (+30/30)':`Belum semua PC terhubung dalam satu jaringan (${pcComponents.size} kelompok PC)`);
- let goodSwitch=switches.length>0&&switchConnected>0;score+=goodSwitch?15:0;criteria.push(goodSwitch?`Switch digunakan dan terhubung (+15/15)`:'Belum ada switch yang terhubung (+0/15)');
- let noOverload=true;for(let s of switches){let degree=(adj.get(s.id)||[]).length,capacity=s.type==='switch8'?8:16;if(degree>capacity)noOverload=false;}score+=noOverload&&switches.length?10:0;criteria.push(noOverload&&switches.length?'Kapasitas port switch tidak terlampaui (+10/10)':'Periksa jumlah koneksi pada switch atau tambahkan switch (+0/10)');
- let summary=score>=90?'Sangat baik! Rancangan jaringan sudah memenuhi sebagian besar kriteria.':score>=70?'Baik. Periksa kembali koneksi PC yang belum terhubung dan kapasitas perangkat.':score>=40?'Cukup. Beberapa PC atau perangkat jaringan belum tersambung dengan benar.':'Perlu perbaikan. Hubungkan PC melalui switch dan satukan seluruh bagian jaringan.';
+function testNetwork(){
+ if(!started){$('startGate').classList.remove('hidden');return;}
+ const pcs=nodes.filter(n=>n.type==='pc');
+ const switches=nodes.filter(n=>n.type==='switch8'||n.type==='switch16');
+ const {adj,comp}=getComponents();
+ const isSwitch=n=>n&&(n.type==='switch8'||n.type==='switch16');
+ const pcCheck=pcs.map(pc=>{
+   const neighbors=(adj.get(pc.id)||[]).map(id=>nodeById(id)).filter(Boolean);
+   // Agar dianggap benar, PC harus memiliki tepat satu kabel langsung ke switch.
+   return {pc,neighbors,valid:neighbors.length===1&&isSwitch(neighbors[0])};
+ });
+ const validPCs=pcCheck.filter(x=>x.valid).length;
+ const pcPct=pcs.length?validPCs/pcs.length:0;
+ let score=0,criteria=[];
+ const pcPoints=Math.round(pcPct*45);score+=pcPoints;
+ criteria.push(`${validPCs}/${pcs.length} PC terhubung tepat ke satu switch (tanpa koneksi langsung ke PC/router/modem) (+${pcPoints}/45)`);
+ const allPcSame=pcs.length===20&&validPCs===pcs.length&&new Set(pcs.map(n=>comp.get(n.id))).size===1;
+ const sharedPoints=allPcSame?30:0;score+=sharedPoints;
+ criteria.push(allPcSame?'Semua 20 PC berada dalam satu jaringan melalui perangkat yang sesuai (+30/30)':'Belum semua 20 PC berada dalam satu jaringan yang benar (+0/30)');
+ const switchConnected=switches.filter(n=>(adj.get(n.id)||[]).length>0).length;
+ const goodSwitch=switches.length>0&&switchConnected>0;
+ const switchPoints=goodSwitch?15:0;score+=switchPoints;
+ criteria.push(goodSwitch?`Switch digunakan dan terhubung (${switchConnected} switch terhubung) (+15/15)`:'Belum ada switch yang terhubung (+0/15)');
+ let overloaded=[];
+ for(const sw of switches){
+   const degree=(adj.get(sw.id)||[]).length;
+   const capacity=sw.type==='switch8'?8:16;
+   if(degree>capacity)overloaded.push(`${sw.label}: ${degree}/${capacity} port`);
+ }
+ const noOverload=switches.length>0&&overloaded.length===0;
+ const capacityPoints=noOverload?10:0;score+=capacityPoints;
+ criteria.push(noOverload?'Kapasitas port seluruh switch tidak terlampaui (+10/10)':switches.length===0?'Belum ada switch untuk diperiksa (+0/10)':`Kapasitas port terlampaui: ${overloaded.join(', ')} (+0/10)`);
+ // Tampilkan pelanggaran secara eksplisit agar siswa tahu koneksi mana yang harus diperbaiki.
+ const invalidPCs=pcCheck.filter(x=>!x.valid).map(x=>{
+   const names=x.neighbors.map(n=>n.label+' ('+n.type+')').join(', ');
+   return `${x.pc.label}: ${x.neighbors.length===0?'belum memiliki koneksi':x.neighbors.length>1?'memiliki lebih dari satu koneksi langsung':'terhubung langsung ke perangkat selain switch'}${names?' — '+names:''}`;
+ });
+ if(invalidPCs.length)criteria.push('Perbaikan koneksi PC: '+invalidPCs.join('; '));
+ const summary=score===100?'Sempurna! Semua PC terhubung tepat ke switch, seluruh jaringan tersambung, dan kapasitas port aman.':score>=70?'Baik. Periksa koneksi PC yang tidak sesuai, keterhubungan jaringan, dan kapasitas switch.':score>=40?'Cukup. Masih ada koneksi PC atau perangkat jaringan yang perlu diperbaiki.':'Perlu perbaikan. Hubungkan setiap PC tepat ke satu switch, lalu hubungkan switch agar seluruh PC berada dalam satu jaringan.';
  lastReport=`LAPORAN UJI JARINGAN LABNET 20\nNama: ${studentName||'-'}\nKelas: ${studentClass||'-'}\nTanggal: ${new Date().toLocaleString('id-ID')}\nSkor: ${score}/100\nRingkasan: ${summary}\n\nHASIL PEMERIKSAAN\n${criteria.map((x,i)=>`${i+1}. ${x}`).join('\n')}\n\nPERANGKAT (${nodes.length})\n${nodes.map(n=>`- ${n.label} (${typeInfo[n.type].label})`).join('\n')}\n\nKONEKSI (${links.length})\n${links.map(l=>`${nodeById(l.a)?.label||'?'} <-> ${nodeById(l.b)?.label||'?'}`).join('\n')||'Belum ada koneksi'}\n`;
- $('scoreSmall').textContent=score;$('scoreBig').textContent=score+'/100';$('resultSummary').textContent=summary;$('resultList').innerHTML=criteria.map(s=>'<li>'+escapeHtml(s)+'</li>').join('');$('resultModal').classList.add('show');setStatus(`Uji selesai. Skor ${score}/100.`,score>=70?'good':'bad');animatePackets();sendScoreToSheet(score);return score;}
+ $('scoreSmall').textContent=score;$('scoreBig').textContent=score+'/100';$('resultSummary').textContent=summary;$('resultList').innerHTML=criteria.map(s=>'<li>'+escapeHtml(s)+'</li>').join('');$('resultModal').classList.add('show');setStatus(`Uji selesai. Skor ${score}/100.`,score>=70?'good':'bad');animatePackets();sendScoreToSheet(score);return score;
+}
 function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 $('testNetwork').addEventListener('click',testNetwork);$('closeModal').addEventListener('click',()=>$('resultModal').classList.remove('show'));$('resultModal').addEventListener('click',e=>{if(e.target===$('resultModal'))$('resultModal').classList.remove('show');});
 function downloadReport(){if(!lastReport)testNetwork();let blob=new Blob([lastReport],{type:'text/plain;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='laporan-labnet20.txt';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
